@@ -343,11 +343,113 @@ classdef ArtLabeler < matlab.apps.AppBase
             app.updateInfoPanel();
             app.autoSave();
         end
-        function deleteRegion(app), end
-        function undoAction(app), end
-        function redoAction(app), end
-        function prevImage(app), end
-        function nextImage(app), end
+        function deleteRegion(app)
+            if app.selectedRegion < 1 || app.selectedRegion > numel(app.regions)
+                app.StatusBar.Text = 'No region selected.';
+                return;
+            end
+
+            app.pushUndo();
+
+            r = app.regions{app.selectedRegion};
+            if ~isempty(r.roi) && isvalid(r.roi)
+                delete(r.roi);
+            end
+
+            app.regions(app.selectedRegion) = [];
+            app.selectedRegion = 0;
+            app.dirty = true;
+
+            app.updateOverlay();
+            app.updateInfoPanel();
+            app.autoSave();
+        end
+        function undoAction(app)
+            if undoStack('isEmpty', app.undoStack)
+                app.StatusBar.Text = 'Nothing to undo.';
+                return;
+            end
+            app.redoStack = undoStack('push', app.redoStack, app.regions);
+            [app.undoStack, snapshot] = undoStack('pop', app.undoStack);
+
+            if isempty(snapshot)
+                snapshot = {};
+            end
+
+            for i = 1:numel(app.regions)
+                if ~isempty(app.regions{i}.roi) && isvalid(app.regions{i}.roi)
+                    delete(app.regions{i}.roi);
+                end
+            end
+
+            app.regions = {};
+            for i = 1:numel(snapshot)
+                r = snapshot{i};
+                roi = drawpolygon(app.UIAxes, 'Position', r.points);
+                roi.InteractionsAllowed = 'reshape';
+                roi.Visible = 'off';
+                r.roi = roi;
+                r.mask = createMask(roi);
+                app.regions{i} = r;
+            end
+
+            app.selectedRegion = 0;
+            app.updateOverlay();
+            app.updateInfoPanel();
+            app.autoSave();
+        end
+        function redoAction(app)
+            if undoStack('isEmpty', app.redoStack)
+                app.StatusBar.Text = 'Nothing to redo.';
+                return;
+            end
+            app.undoStack = undoStack('push', app.undoStack, app.regions);
+            [app.redoStack, snapshot] = undoStack('pop', app.redoStack);
+
+            for i = 1:numel(app.regions)
+                if ~isempty(app.regions{i}.roi) && isvalid(app.regions{i}.roi)
+                    delete(app.regions{i}.roi);
+                end
+            end
+
+            app.regions = {};
+            for i = 1:numel(snapshot)
+                r = snapshot{i};
+                roi = drawpolygon(app.UIAxes, 'Position', r.points);
+                roi.InteractionsAllowed = 'reshape';
+                roi.Visible = 'off';
+                r.roi = roi;
+                r.mask = createMask(roi);
+                app.regions{i} = r;
+            end
+
+            app.selectedRegion = 0;
+            app.updateOverlay();
+            app.updateInfoPanel();
+            app.autoSave();
+        end
+        function nextImage(app)
+            if app.currentIdx >= numel(app.imageList)
+                return;
+            end
+            if app.dirty
+                app.saveCurrent();
+            end
+            app.clearRegions();
+            app.currentIdx = app.currentIdx + 1;
+            app.loadCurrentImage();
+        end
+        function prevImage(app)
+            if app.currentIdx <= 1
+                return;
+            end
+            if app.dirty
+                app.saveCurrent();
+            end
+            app.clearRegions();
+            app.currentIdx = app.currentIdx - 1;
+            app.loadCurrentImage();
+        end
         function saveCurrent(app)
             if isempty(app.currentImg) || app.currentIdx < 1
                 return;
@@ -460,7 +562,25 @@ classdef ArtLabeler < matlab.apps.AppBase
                 sprintf('Exported %d annotated images.', count), ...
                 'Export Complete');
         end
-        function reclassifyRegion(app), end
+        function reclassifyRegion(app)
+            if app.selectedRegion < 1 || app.selectedRegion > numel(app.regions)
+                return;
+            end
+            newLabel = app.ReclassifyDropdown.Value;
+            oldLabel = app.regions{app.selectedRegion}.label;
+            if strcmp(newLabel, oldLabel)
+                return;
+            end
+
+            app.pushUndo();
+
+            app.regions{app.selectedRegion}.label = newLabel;
+            app.dirty = true;
+
+            app.updateOverlay();
+            app.updateInfoPanel();
+            app.autoSave();
+        end
         function onRegionSelected(app)
             val = app.RegionList.Value;
             if isempty(val)
