@@ -348,8 +348,118 @@ classdef ArtLabeler < matlab.apps.AppBase
         function redoAction(app), end
         function prevImage(app), end
         function nextImage(app), end
-        function saveCurrent(app), end
-        function exportAll(app), end
+        function saveCurrent(app)
+            if isempty(app.currentImg) || app.currentIdx < 1
+                return;
+            end
+            [~, name, ext] = fileparts(app.imageList{app.currentIdx});
+
+            maskPath = fullfile(app.imageDir, [name '_mask.png']);
+            jsonPath = fullfile(app.imageDir, [name '_meta.json']);
+
+            try
+                exportMask(app.regions, size(app.currentImg, [1 2]), maskPath);
+                exportJson([name ext], size(app.currentImg, [1 2]), app.regions, jsonPath);
+                app.dirty = false;
+                app.StatusBar.Text = sprintf('Saved %s_mask.png, %s_meta.json', name, name);
+                app.updateStatusBar();
+            catch ME
+                app.StatusBar.Text = ['Save error: ' ME.message];
+            end
+        end
+        function exportAll(app)
+            if isempty(app.imageDir)
+                uialert(app.UIFigure, 'No image folder loaded.', 'Export Error');
+                return;
+            end
+
+            [indx, tf] = listdlg('PromptString', 'Select export formats:', ...
+                'SelectionMode', 'multiple', ...
+                'ListString', {'Mask PNG', 'JSON', 'LabelMe XML'}, ...
+                'Name', 'Export', 'ListSize', [200 100]);
+            if tf == 0
+                return;
+            end
+            if isempty(indx)
+                uialert(app.UIFigure, 'Select at least one export format.', 'Export');
+                return;
+            end
+
+            metaFiles = dir(fullfile(app.imageDir, '*_meta.json'));
+            if isempty(metaFiles)
+                uialert(app.UIFigure, 'No annotations found to export.', 'Export');
+                return;
+            end
+
+            choice = uiconfirm(app.UIFigure, ...
+                'Existing export files will be overwritten. Continue?', ...
+                'Export', 'Options', {'Continue', 'Cancel'}, ...
+                'DefaultOption', 1, 'CancelOption', 2);
+            if strcmp(choice, 'Cancel'), return; end
+
+            exportMaskFmt = ismember(1, indx);
+            exportJsonFmt = ismember(2, indx);
+            exportLabelMeFmt = ismember(3, indx);
+
+            count = 0;
+            for i = 1:numel(metaFiles)
+                jsonPath = fullfile(app.imageDir, metaFiles(i).name);
+                try
+                    txt = fileread(jsonPath);
+                    data = jsondecode(txt);
+
+                    if exportMaskFmt
+                        combined = zeros(data.height, data.width, 'uint8');
+                        classIds = containers.Map(...
+                            {'person', 'building', 'sky', 'plant'}, ...
+                            {1, 2, 3, 4});
+                        for j = 1:numel(data.regions)
+                            pts = data.regions{j}.points;
+                            if size(pts, 1) >= 3
+                                roi = images.roi.Polygon('Position', pts);
+                                mask = createMask(roi, data.height, data.width);
+                                if isKey(classIds, data.regions{j}.label)
+                                    combined(mask) = classIds(data.regions{j}.label);
+                                end
+                                delete(roi);
+                            end
+                        end
+                        maskPath = strrep(jsonPath, '_meta.json', '_mask.png');
+                        imwrite(combined, maskPath);
+                    end
+
+                    if exportJsonFmt
+                        regionsForJson = {};
+                        for j = 1:numel(data.regions)
+                            pts = data.regions{j}.points;
+                            if size(pts, 1) >= 3
+                                roi = images.roi.Polygon('Position', pts);
+                                m = createMask(roi, data.height, data.width);
+                                regionsForJson{end+1} = struct(...
+                                    'label', data.regions{j}.label, ...
+                                    'points', pts, 'mask', m);
+                                delete(roi);
+                            end
+                        end
+                        exportJson(data.image, [data.height data.width], regionsForJson, jsonPath);
+                    end
+
+                    if exportLabelMeFmt
+                        [~, name] = fileparts(strrep(metaFiles(i).name, '_meta', ''));
+                        xmlPath = fullfile(app.imageDir, [name '.xml']);
+                        exportLabelMe(data.image, [data.height data.width], data.regions, xmlPath);
+                    end
+
+                    count = count + 1;
+                catch ME
+                    warning('Export failed for %s: %s', metaFiles(i).name, ME.message);
+                end
+            end
+
+            uialert(app.UIFigure, ...
+                sprintf('Exported %d annotated images.', count), ...
+                'Export Complete');
+        end
         function reclassifyRegion(app), end
         function onRegionSelected(app)
             val = app.RegionList.Value;
@@ -386,7 +496,30 @@ classdef ArtLabeler < matlab.apps.AppBase
             app.DeleteRegionButton.Enable = true;
             app.updateButtonStates();
         end
-        function onClose(app), end
+        function onClose(app)
+            if app.dirty
+                choice = uiconfirm(app.UIFigure, ...
+                    'Unsaved changes. Save before closing?', ...
+                    'Close', 'Options', {'Yes', 'No', 'Cancel'}, ...
+                    'DefaultOption', 1, 'CancelOption', 3);
+                switch choice
+                    case 'Yes'
+                        app.saveCurrent();
+                    case 'Cancel'
+                        return;
+                end
+            end
+            if ~isempty(app.saveDebounceTimer) && isvalid(app.saveDebounceTimer)
+                stop(app.saveDebounceTimer);
+                delete(app.saveDebounceTimer);
+            end
+            for i = 1:numel(app.regions)
+                if ~isempty(app.regions{i}.roi) && isvalid(app.regions{i}.roi)
+                    delete(app.regions{i}.roi);
+                end
+            end
+            delete(app.UIFigure);
+        end
 
         function loadCurrentImage(app)
             if isempty(app.imageList) || app.currentIdx < 1
@@ -432,7 +565,41 @@ classdef ArtLabeler < matlab.apps.AppBase
         end
 
         function loadAnnotations(app)
-            % stub — load previous annotations from _meta.json
+            if isempty(app.currentImg) || app.currentIdx < 1
+                return;
+            end
+            [~, name] = fileparts(app.imageList{app.currentIdx});
+            jsonPath = fullfile(app.imageDir, [name '_meta.json']);
+
+            if ~isfile(jsonPath)
+                return;
+            end
+
+            try
+                txt = fileread(jsonPath);
+                data = jsondecode(txt);
+
+                for i = 1:numel(data.regions)
+                    pts = data.regions{i}.points;
+                    if size(pts, 1) < 3
+                        continue;
+                    end
+                    roi = drawpolygon(app.UIAxes, 'Position', pts);
+                    roi.InteractionsAllowed = 'reshape';
+                    roi.Visible = 'off';
+                    mask = createMask(roi);
+
+                    region = struct('points', roi.Position, ...
+                        'label', data.regions{i}.label, ...
+                        'mask', mask, 'roi', roi);
+                    app.regions{end+1} = region;
+                end
+
+                app.updateOverlay();
+                app.updateInfoPanel();
+            catch ME
+                app.StatusBar.Text = ['Warning: Could not load annotations - ' ME.message];
+            end
         end
 
         function updateInfoPanel(app)
