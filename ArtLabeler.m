@@ -237,8 +237,65 @@ classdef ArtLabeler < matlab.apps.AppBase
             end
         end
 
-        function loadImage(app), end
-        function loadFolder(app), end
+        function loadImage(app)
+            [filename, pathname] = uigetfile({'*.jpg;*.png;*.bmp', 'Image Files (*.jpg,*.png,*.bmp)'});
+            if isequal(filename, 0)
+                return;
+            end
+
+            fullpath = fullfile(pathname, filename);
+            try
+                img = imread(fullpath);
+            catch
+                uialert(app.UIFigure, ['Failed to read: ' filename], 'Load Error');
+                return;
+            end
+
+            if app.dirty
+                app.saveCurrent();
+            end
+
+            app.clearRegions();
+            app.imageList = {fullpath};
+            app.currentIdx = 1;
+            app.imageDir = pathname;
+            app.currentImg = img;
+
+            imshow(app.currentImg, 'Parent', app.UIAxes);
+            app.updateButtonStates();
+            app.updateStatusBar();
+            app.updateInfoPanel();
+            app.loadAnnotations();
+        end
+        function loadFolder(app)
+            pathname = uigetdir(pwd, 'Select Image Folder');
+            if isequal(pathname, 0)
+                return;
+            end
+
+            files = dir(fullfile(pathname, '*.jpg'));
+            files = [files; dir(fullfile(pathname, '*.png'))];
+            files = [files; dir(fullfile(pathname, '*.bmp'))];
+
+            if isempty(files)
+                uialert(app.UIFigure, 'No supported images found in this folder.', 'Empty Folder');
+                return;
+            end
+
+            if app.dirty && ~isempty(app.currentImg)
+                app.saveCurrent();
+            end
+
+            app.resetSession();
+            app.imageDir = pathname;
+            app.imageList = cell(1, numel(files));
+            for i = 1:numel(files)
+                app.imageList{i} = fullfile(pathname, files(i).name);
+            end
+            app.currentIdx = 1;
+
+            app.loadCurrentImage();
+        end
         function startAnnotation(app), end
         function deleteRegion(app), end
         function undoAction(app), end
@@ -250,6 +307,60 @@ classdef ArtLabeler < matlab.apps.AppBase
         function reclassifyRegion(app), end
         function onRegionSelected(app), end
         function onClose(app), end
+
+        function loadCurrentImage(app)
+            if isempty(app.imageList) || app.currentIdx < 1
+                return;
+            end
+            try
+                app.currentImg = imread(app.imageList{app.currentIdx});
+            catch
+                uialert(app.UIFigure, ...
+                    ['Failed to read: ' app.imageList{app.currentIdx}], 'Load Error');
+                app.currentImg = [];
+                return;
+            end
+            imshow(app.currentImg, 'Parent', app.UIAxes);
+            app.updateButtonStates();
+            app.updateStatusBar();
+            app.updateInfoPanel();
+            app.loadAnnotations();
+        end
+
+        function resetSession(app)
+            app.clearRegions();
+            app.imageList = {};
+            app.currentIdx = 0;
+            app.imageDir = '';
+            app.currentImg = [];
+        end
+
+        function clearRegions(app)
+            if ~isempty(app.saveDebounceTimer) && isvalid(app.saveDebounceTimer)
+                stop(app.saveDebounceTimer);
+            end
+            for i = 1:numel(app.regions)
+                if ~isempty(app.regions{i}.roi) && isvalid(app.regions{i}.roi)
+                    delete(app.regions{i}.roi);
+                end
+            end
+            app.regions = {};
+            app.undoStack = undoStack('create', 50);
+            app.redoStack = undoStack('create', 50);
+            app.selectedRegion = 0;
+            app.dirty = false;
+        end
+
+        function loadAnnotations(app)
+            % stub — load previous annotations from _meta.json
+        end
+
+        function updateInfoPanel(app), end
+        function updateOverlay(app), end
+        function deselectRegion(app), end
+        function updateMaskPreview(app), end
+        function autoSave(app), end
+        function pushUndo(app), end
 
     end
 
