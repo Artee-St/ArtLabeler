@@ -296,7 +296,53 @@ classdef ArtLabeler < matlab.apps.AppBase
 
             app.loadCurrentImage();
         end
-        function startAnnotation(app), end
+        function startAnnotation(app)
+            if isempty(app.currentImg)
+                app.StatusBar.Text = 'Load an image first.';
+                return;
+            end
+            if app.isDrawing
+                app.StatusBar.Text = 'Already drawing — double-click to finish current polygon.';
+                return;
+            end
+            if app.selectedRegion > 0
+                app.deselectRegion();
+            end
+
+            app.isDrawing = true;
+            if isempty(app.saveDebounceTimer) || ~isvalid(app.saveDebounceTimer)
+                app.saveDebounceTimer = timer('ExecutionMode', 'singleShot', ...
+                    'StartDelay', 0.5, 'TimerFcn', @(~,~) autoSave(app));
+            end
+            app.StatusBar.Text = 'Click to add vertices. Double-click to finish. Esc to cancel.';
+
+            roi = drawpolygon(app.UIAxes);
+            app.isDrawing = false;
+
+            if isempty(roi) || ~isvalid(roi) || size(roi.Position, 1) < 3
+                app.StatusBar.Text = 'Polygon cancelled or too few vertices.';
+                return;
+            end
+
+            mask = createMask(roi);
+            if sum(mask(:)) == 0
+                delete(roi);
+                app.StatusBar.Text = 'Invalid polygon — too few vertices or zero area.';
+                return;
+            end
+
+            app.pushUndo();
+
+            roi.InteractionsAllowed = 'reshape';
+            region = struct('points', roi.Position, 'label', app.currentClass, ...
+                'mask', mask, 'roi', roi);
+            app.regions{end+1} = region;
+            app.dirty = true;
+
+            app.updateOverlay();
+            app.updateInfoPanel();
+            app.autoSave();
+        end
         function deleteRegion(app), end
         function undoAction(app), end
         function redoAction(app), end
@@ -305,7 +351,41 @@ classdef ArtLabeler < matlab.apps.AppBase
         function saveCurrent(app), end
         function exportAll(app), end
         function reclassifyRegion(app), end
-        function onRegionSelected(app), end
+        function onRegionSelected(app)
+            val = app.RegionList.Value;
+            if isempty(val)
+                app.deselectRegion();
+                return;
+            end
+
+            idx = find(strcmp(app.RegionList.Items, val), 1);
+            if isempty(idx)
+                return;
+            end
+
+            if app.selectedRegion == idx
+                app.deselectRegion();
+                return;
+            end
+
+            if app.selectedRegion > 0
+                old = app.regions{app.selectedRegion};
+                if ~isempty(old.roi) && isvalid(old.roi)
+                    old.roi.Visible = 'off';
+                end
+            end
+
+            app.selectedRegion = idx;
+            r = app.regions{idx};
+            if ~isempty(r.roi) && isvalid(r.roi)
+                r.roi.Visible = 'on';
+            end
+
+            app.ReclassifyDropdown.Value = r.label;
+            app.ReclassifyDropdown.Enable = true;
+            app.DeleteRegionButton.Enable = true;
+            app.updateButtonStates();
+        end
         function onClose(app), end
 
         function loadCurrentImage(app)
@@ -355,12 +435,119 @@ classdef ArtLabeler < matlab.apps.AppBase
             % stub — load previous annotations from _meta.json
         end
 
-        function updateInfoPanel(app), end
-        function updateOverlay(app), end
-        function deselectRegion(app), end
-        function updateMaskPreview(app), end
-        function autoSave(app), end
-        function pushUndo(app), end
+        function updateInfoPanel(app)
+            n = numel(app.regions);
+            app.RegionCountLabel.Text = sprintf('Regions: %d', n);
+
+            items = cell(1, n);
+            for i = 1:n
+                areaPx = sum(app.regions{i}.mask(:));
+                totalPx = numel(app.regions{i}.mask);
+                pct = 100 * areaPx / totalPx;
+                items{i} = sprintf('%s - %.1f%%', char(app.regions{i}.label), pct);
+            end
+            app.RegionList.Items = items;
+
+            if n == 0
+                app.AreaStatsLabel.Text = 'Area Stats: -';
+            else
+                stats = cell(1, n+1);
+                stats{1} = 'Area Stats:';
+                for i = 1:n
+                    areaPx = sum(app.regions{i}.mask(:));
+                    totalPx = numel(app.regions{i}.mask);
+                    pct = 100 * areaPx / totalPx;
+                    stats{i+1} = sprintf('  %s: %d px (%.1f%%)', ...
+                        char(app.regions{i}.label), areaPx, pct);
+                end
+                app.AreaStatsLabel.Text = strjoin(stats, newline);
+            end
+
+            app.updateMaskPreview();
+            app.updateButtonStates();
+            app.updateStatusBar();
+        end
+
+        function updateOverlay(app)
+            existing = findobj(app.UIAxes, 'Type', 'Image');
+            if numel(existing) > 1
+                delete(existing(2:end));
+            end
+
+            if isempty(app.regions)
+                return;
+            end
+
+            colors = containers.Map(...
+                {'person', 'building', 'sky', 'plant'}, ...
+                {[1 0 0], [0 0 1], [0.5 0.8 1], [0 0.6 0]});
+
+            [h, w, ~] = size(app.currentImg);
+            overlay = zeros(h, w, 3);
+
+            for i = 1:numel(app.regions)
+                c = colors(app.regions{i}.label);
+                mask = app.regions{i}.mask;
+                for ch = 1:3
+                    chOverlay = overlay(:,:,ch);
+                    chOverlay(mask) = c(ch);
+                    overlay(:,:,ch) = chOverlay;
+                end
+            end
+
+            hold(app.UIAxes, 'on');
+            hImg = imshow(overlay, 'Parent', app.UIAxes);
+            set(hImg, 'AlphaData', 0.4);
+            hold(app.UIAxes, 'off');
+        end
+
+        function deselectRegion(app)
+            if app.selectedRegion > 0 && app.selectedRegion <= numel(app.regions)
+                r = app.regions{app.selectedRegion};
+                if ~isempty(r.roi) && isvalid(r.roi)
+                    r.roi.Visible = 'off';
+                end
+            end
+            app.selectedRegion = 0;
+            app.RegionList.Value = {};
+        end
+
+        function updateMaskPreview(app)
+            cla(app.MaskPreviewAxes);
+            if isempty(app.regions) || isempty(app.currentImg)
+                return;
+            end
+
+            [h, w, ~] = size(app.currentImg);
+            combined = zeros(h, w, 'uint8');
+            classIds = containers.Map(...
+                {'person', 'building', 'sky', 'plant'}, ...
+                {1, 2, 3, 4});
+            for i = 1:numel(app.regions)
+                id = classIds(app.regions{i}.label);
+                combined(app.regions{i}.mask) = id;
+            end
+
+            imagesc(app.MaskPreviewAxes, combined);
+            axis(app.MaskPreviewAxes, 'equal');
+            colormap(app.MaskPreviewAxes, [0 0 0; 1 0 0; 0 0 1; 0.5 0.8 1; 0 0.6 0]);
+            caxis(app.MaskPreviewAxes, [0 4]);
+            app.MaskPreviewAxes.XTick = [];
+            app.MaskPreviewAxes.YTick = [];
+            title(app.MaskPreviewAxes, 'Mask Preview');
+        end
+
+        function autoSave(app)
+            if isempty(app.currentImg)
+                return;
+            end
+            app.saveCurrent();
+        end
+
+        function pushUndo(app)
+            app.redoStack = undoStack('clear', app.redoStack);
+            app.undoStack = undoStack('push', app.undoStack, app.regions);
+        end
 
     end
 
