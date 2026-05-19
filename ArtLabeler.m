@@ -61,7 +61,8 @@ classdef ArtLabeler < matlab.apps.AppBase
         function createComponents(app)
             app.UIFigure = uifigure('Name', 'ArtLabeler', ...
                 'Position', [100 100 1280 720], ...
-                'CloseRequestFcn', @(~,~) onClose(app));
+                'CloseRequestFcn', @(~,~) onClose(app), ...
+                'KeyPressFcn', @(~, evt) onKeyPress(app, evt));
 
             mainGrid = uigridlayout(app.UIFigure, [1 3]);
             mainGrid.ColumnWidth = {200, '1x', 220};
@@ -151,6 +152,7 @@ classdef ArtLabeler < matlab.apps.AppBase
             app.UIAxes.XTick = [];
             app.UIAxes.YTick = [];
             app.UIAxes.Box = 'on';
+            app.UIAxes.DataAspectRatio = [1 1 1];
 
             % Right panel
             app.RightPanel = uipanel(mainGrid);
@@ -334,6 +336,7 @@ classdef ArtLabeler < matlab.apps.AppBase
             app.pushUndo();
 
             roi.InteractionsAllowed = 'reshape';
+            addlistener(roi, 'ROIMoved', @(src, ~) onVertexDragged(app, src));
             region = struct('points', roi.Position, 'label', app.currentClass, ...
                 'mask', mask, 'roi', roi);
             app.regions{end+1} = region;
@@ -387,6 +390,7 @@ classdef ArtLabeler < matlab.apps.AppBase
                 r = snapshot{i};
                 roi = drawpolygon(app.UIAxes, 'Position', r.points);
                 roi.InteractionsAllowed = 'reshape';
+                addlistener(roi, 'ROIMoved', @(src, ~) onVertexDragged(app, src));
                 roi.Visible = 'off';
                 r.roi = roi;
                 r.mask = createMask(roi);
@@ -417,6 +421,7 @@ classdef ArtLabeler < matlab.apps.AppBase
                 r = snapshot{i};
                 roi = drawpolygon(app.UIAxes, 'Position', r.points);
                 roi.InteractionsAllowed = 'reshape';
+                addlistener(roi, 'ROIMoved', @(src, ~) onVertexDragged(app, src));
                 roi.Visible = 'off';
                 r.roi = roi;
                 r.mask = createMask(roi);
@@ -706,6 +711,7 @@ classdef ArtLabeler < matlab.apps.AppBase
                     end
                     roi = drawpolygon(app.UIAxes, 'Position', pts);
                     roi.InteractionsAllowed = 'reshape';
+                    addlistener(roi, 'ROIMoved', @(src, ~) onVertexDragged(app, src));
                     roi.Visible = 'off';
                     mask = createMask(roi);
 
@@ -834,6 +840,63 @@ classdef ArtLabeler < matlab.apps.AppBase
         function pushUndo(app)
             app.redoStack = undoStack('clear', app.redoStack);
             app.undoStack = undoStack('push', app.undoStack, app.regions);
+        end
+
+        function onKeyPress(app, evt)
+            switch evt.Key
+                case 'z'
+                    if any(strcmp(evt.Modifier, 'control'))
+                        app.undoAction();
+                    end
+                case 'y'
+                    if any(strcmp(evt.Modifier, 'control'))
+                        app.redoAction();
+                    end
+                case 'delete'
+                    app.deleteRegion();
+                case 's'
+                    app.saveCurrent();
+                case 'n'
+                    app.nextImage();
+                case 'p'
+                    app.prevImage();
+                case 'e'
+                    app.exportAll();
+            end
+        end
+
+        function onVertexDragged(app, roi)
+            idx = 0;
+            for i = 1:numel(app.regions)
+                if app.regions{i}.roi == roi
+                    idx = i;
+                    break;
+                end
+            end
+            if idx == 0
+                return;
+            end
+
+            oldPoints = app.regions{idx}.points;
+            app.regions{idx}.points = roi.Position;
+            newMask = createMask(roi);
+
+            if sum(newMask(:)) == 0
+                app.regions{idx}.points = oldPoints;
+                roi.Position = oldPoints;
+                app.StatusBar.Text = 'Invalid polygon shape - reverted.';
+                return;
+            end
+
+            app.regions{idx}.mask = newMask;
+            app.dirty = true;
+            app.updateOverlay();
+            app.updateInfoPanel();
+
+            if ~isempty(app.saveDebounceTimer) && isvalid(app.saveDebounceTimer)
+                stop(app.saveDebounceTimer);
+                start(app.saveDebounceTimer);
+            end
         end
 
     end
