@@ -833,7 +833,7 @@ classdef ArtLabeler < matlab.apps.AppBase
             imagesc(app.MaskPreviewAxes, combined);
             axis(app.MaskPreviewAxes, 'equal');
             colormap(app.MaskPreviewAxes, [0 0 0; 1 0 0; 0 0 1; 0.5 0.8 1; 0 0.6 0]);
-            caxis(app.MaskPreviewAxes, [0 4]);
+            clim(app.MaskPreviewAxes, [0 4]);
             app.MaskPreviewAxes.XTick = [];
             app.MaskPreviewAxes.YTick = [];
             title(app.MaskPreviewAxes, 'Mask Preview');
