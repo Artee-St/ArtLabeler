@@ -14,13 +14,17 @@ function exportLabelMe(filename, imageSize, regions, filepath)
     fprintf(fid, '  <imagesize><nrows>%d</nrows><ncols>%d</ncols></imagesize>\n', ...
         imageSize(1), imageSize(2));
 
+    if isstruct(regions)
+        regions = num2cell(regions);
+    end
     for i = 1:numel(regions)
+        r = regions{i};
         fprintf(fid, '  <object>\n');
-        fprintf(fid, '    <name>%s</name>\n', regions{i}.label);
+        fprintf(fid, '    <name>%s</name>\n', r.label);
         fprintf(fid, '    <deleted>0</deleted>\n');
         fprintf(fid, '    <verified>0</verified>\n');
         fprintf(fid, '    <polygon>\n');
-        pts = regions{i}.points;
+        pts = r.points;
         for j = 1:size(pts, 1)
             fprintf(fid, '      <pt><x>%d</x><y>%d</y></pt>\n', round(pts(j,1)), round(pts(j,2)));
         end

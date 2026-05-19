@@ -517,6 +517,9 @@ classdef ArtLabeler < matlab.apps.AppBase
                 try
                     txt = fileread(jsonPath);
                     data = jsondecode(txt);
+                    if isstruct(data.regions)
+                        data.regions = num2cell(data.regions);
+                    end
 
                     if exportMaskFmt
                         combined = zeros(data.height, data.width, 'uint8');
@@ -706,6 +709,9 @@ classdef ArtLabeler < matlab.apps.AppBase
             try
                 txt = fileread(jsonPath);
                 data = jsondecode(txt);
+                if isstruct(data.regions)
+                    data.regions = num2cell(data.regions);
+                end
 
                 for i = 1:numel(data.regions)
                     pts = data.regions{i}.points;
