@@ -76,7 +76,7 @@ classdef ArtLabeler < matlab.apps.AppBase
             app.LeftPanel.Layout.Column = 1;
 
             leftGrid = uigridlayout(app.LeftPanel, [14 1]);
-            leftGrid.RowHeight = repmat({25}, 1, 13);
+            leftGrid.RowHeight = repmat({25}, 1, 14);
             leftGrid.RowHeight{14} = '1x';
             leftGrid.Padding = [4 4 4 4];
             leftGrid.RowSpacing = 4;
@@ -97,7 +97,8 @@ classdef ArtLabeler < matlab.apps.AppBase
                 'ButtonPushedFcn', @(~,~) loadFolder(app));
             app.LoadFolderButton.Layout.Row = 3;
 
-            uilabel(leftGrid, 'Text', '', 'HorizontalAlignment', 'center').Layout.Row = 4;
+            lbl = uilabel(leftGrid, 'Text', '', 'HorizontalAlignment', 'center');
+            lbl.Layout.Row = 4;
 
             app.StartAnnotationButton = uibutton(leftGrid, 'push', ...
                 'Text', 'Start Annotation', ...
@@ -119,7 +120,8 @@ classdef ArtLabeler < matlab.apps.AppBase
                 'ButtonPushedFcn', @(~,~) redoAction(app));
             app.RedoButton.Layout.Row = 8;
 
-            uilabel(leftGrid, 'Text', '', 'HorizontalAlignment', 'center').Layout.Row = 9;
+            lbl = uilabel(leftGrid, 'Text', '', 'HorizontalAlignment', 'center');
+            lbl.Layout.Row = 9;
 
             app.PrevButton = uibutton(leftGrid, 'push', ...
                 'Text', [char(9664) ' Previous'], ...
@@ -131,7 +133,8 @@ classdef ArtLabeler < matlab.apps.AppBase
                 'ButtonPushedFcn', @(~,~) nextImage(app));
             app.NextButton.Layout.Row = 11;
 
-            uilabel(leftGrid, 'Text', '', 'HorizontalAlignment', 'center').Layout.Row = 12;
+            lbl = uilabel(leftGrid, 'Text', '', 'HorizontalAlignment', 'center');
+            lbl.Layout.Row = 12;
 
             app.SaveButton = uibutton(leftGrid, 'push', ...
                 'Text', 'Save', ...
@@ -147,8 +150,8 @@ classdef ArtLabeler < matlab.apps.AppBase
             app.CenterPanel = uipanel(mainGrid);
             app.CenterPanel.Layout.Row = 1;
             app.CenterPanel.Layout.Column = 2;
-            app.UIAxes = uiaxes(app.CenterPanel);
-            app.UIAxes.Position = [0 0 app.CenterPanel.Position(3) app.CenterPanel.Position(4)];
+            app.UIAxes = uiaxes(app.CenterPanel, 'Units', 'normalized', ...
+                'Position', [0 0 1 1]);
             app.UIAxes.XTick = [];
             app.UIAxes.YTick = [];
             app.UIAxes.Box = 'on';
