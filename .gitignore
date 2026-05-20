@@ -1,0 +1,6 @@
+# Claude Code local settings
+.claude/
+
+# MATLAB temp files
+*.asv
+*.m~
