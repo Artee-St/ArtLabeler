@@ -1,10 +1,16 @@
 function exportLabelMe(filename, imageSize, regions, filepath)
-    % exportLabelMe  Write LabelMe-compatible XML annotation
+    % exportLabelMe  Write LabelMe-compatible XML annotation.
+    %
     %   exportLabelMe(filename, imageSize, regions, filepath)
+    %
+    %   filename:  source image filename
+    %   imageSize: [height, width]
+    %   regions:   cell array or struct array of region entries
+    %   filepath:  full output path for XML
 
     fid = fopen(filepath, 'w');
     if fid == -1
-        error('exportLabelMe:cannotOpen', 'Cannot open %s', filepath);
+        error('exportLabelMe:cannotOpen', 'Cannot open %s for writing.', filepath);
     end
 
     fprintf(fid, '<annotation>\n');
@@ -14,9 +20,10 @@ function exportLabelMe(filename, imageSize, regions, filepath)
     fprintf(fid, '  <imagesize><nrows>%d</nrows><ncols>%d</ncols></imagesize>\n', ...
         imageSize(1), imageSize(2));
 
-    if isstruct(regions)
+    if isstruct(regions) && ~iscell(regions)
         regions = num2cell(regions);
     end
+
     for i = 1:numel(regions)
         r = regions{i};
         fprintf(fid, '  <object>\n');

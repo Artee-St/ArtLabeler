@@ -1,42 +1,45 @@
 function darkTheme(app)
-    % Apply dark color scheme to ArtLabeler UI components
-    BG = [0.15 0.15 0.15];
-    FG = [0.2 0.2 0.2];
+    % darkTheme  Apply dark color scheme to ArtLabeler UI components.
+    %
+    %   darkTheme(app) sets background colors, font colors, and
+    %   component styling for the ArtLabeler application figure.
+
+    BG  = [0.15 0.15 0.15];
+    FG  = [0.2  0.2  0.2];
     TXT = [1 1 1];
+    SBG = [0.1  0.1  0.1];
 
     app.UIFigure.Color = BG;
-    app.LeftPanel.BackgroundColor = BG;
-    app.CenterPanel.BackgroundColor = BG;
-    app.RightPanel.BackgroundColor = BG;
 
-    if isprop(app, 'StatusBar')
-        app.StatusBar.BackgroundColor = [0.1 0.1 0.1];
-        app.StatusBar.FontColor = TXT;
+    panels = {'LeftPanel', 'CenterPanel', 'RightPanel'};
+    for i = 1:numel(panels)
+        if isprop(app, panels{i})
+            app.(panels{i}).BackgroundColor = BG;
+        end
     end
 
     btnNames = {'LoadImageButton', 'LoadFolderButton', ...
         'StartAnnotationButton', 'DeleteRegionButton', ...
         'UndoButton', 'RedoButton', 'PrevButton', ...
-        'NextButton', 'SaveButton', 'ExportButton'};
+        'NextButton', 'SaveButton', 'ExportButton', 'ManageTagsButton'};
     for i = 1:numel(btnNames)
-        if isprop(app, btnNames{i})
-            btn = app.(btnNames{i});
-            btn.BackgroundColor = FG;
-            btn.FontColor = TXT;
+        if isprop(app, btnNames{i}) && isvalid(app.(btnNames{i}))
+            app.(btnNames{i}).BackgroundColor = FG;
+            app.(btnNames{i}).FontColor = TXT;
         end
     end
 
-    if isprop(app, 'ClassDropdown')
-        app.ClassDropdown.BackgroundColor = FG;
-        app.ClassDropdown.FontColor = TXT;
+    dropdowns = {'ClassDropdown', 'ReclassifyDropdown', 'RegionList'};
+    for i = 1:numel(dropdowns)
+        if isprop(app, dropdowns{i}) && isvalid(app.(dropdowns{i}))
+            app.(dropdowns{i}).BackgroundColor = FG;
+            app.(dropdowns{i}).FontColor = TXT;
+        end
     end
-    if isprop(app, 'ReclassifyDropdown')
-        app.ReclassifyDropdown.BackgroundColor = FG;
-        app.ReclassifyDropdown.FontColor = TXT;
-    end
-    if isprop(app, 'RegionList')
-        app.RegionList.BackgroundColor = FG;
-        app.RegionList.FontColor = TXT;
+
+    if isprop(app, 'StatusBar') && isvalid(app.StatusBar)
+        app.StatusBar.BackgroundColor = SBG;
+        app.StatusBar.FontColor = TXT;
     end
 
     allLabels = findobj(app.UIFigure, 'Type', 'uilabel');
@@ -44,8 +47,10 @@ function darkTheme(app)
         allLabels(i).FontColor = TXT;
     end
 
-    app.UIAxes.Color = BG;
-    if isprop(app, 'MaskPreviewAxes')
+    if isprop(app, 'UIAxes') && isvalid(app.UIAxes)
+        app.UIAxes.Color = BG;
+    end
+    if isprop(app, 'MaskPreviewAxes') && isvalid(app.MaskPreviewAxes)
         app.MaskPreviewAxes.Color = BG;
     end
 end

@@ -1,9 +1,13 @@
 function varargout = undoStack(action, varargin)
-    % undoStack('create', maxDepth) → stack struct
-    % undoStack('push',   stack, data) → stack
-    % undoStack('pop',    stack) → [stack, data]
-    % undoStack('clear',  stack) → empty stack
-    % undoStack('isEmpty', stack) → logical
+    % undoStack  Undo/redo stack for region annotation data.
+    %
+    %   stack = undoStack('create', maxDepth)
+    %   stack = undoStack('push',   stack, data)
+    %   [stack, data] = undoStack('pop', stack)
+    %   stack = undoStack('clear',  stack)
+    %   tf = undoStack('isEmpty',   stack)
+    %
+    %   Internal: stack is a struct with fields .entries, .depth, .top.
 
     switch action
         case 'create'
@@ -38,21 +42,32 @@ function varargout = undoStack(action, varargin)
 
         case 'isEmpty'
             varargout = {varargin{1}.top == 0};
+
+        otherwise
+            error('undoStack:unknownAction', ...
+                'Unknown action: %s. Valid: create, push, pop, clear, isEmpty.', action);
     end
 end
 
-function copy = deepCopyRegions(data)
-    if isempty(data)
+function copy = deepCopyRegions(regions)
+    % Deep-copy region cell array, stripping roi handles (axes-specific).
+    % Non-cell inputs are returned as-is (no deep copy needed).
+    if ~iscell(regions)
+        copy = regions;
+        return;
+    end
+    if isempty(regions)
         copy = {};
         return;
     end
-    copy = cell(size(data));
-    for i = 1:numel(data)
-        r = data{i};
+    n = numel(regions);
+    copy = cell(1, n);
+    for i = 1:n
+        r = regions{i};
         copy{i} = struct(...
             'points', r.points, ...
-            'label', r.label, ...
-            'mask', r.mask, ...
-            'roi', []);  % roi handles not copied (axes-specific)
+            'label',  r.label, ...
+            'mask',   r.mask, ...
+            'roi',    []);
     end
 end
