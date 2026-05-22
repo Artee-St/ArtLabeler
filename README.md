@@ -1,6 +1,6 @@
-# ArtLabeler
+# ArtLabeler v1.0.0
 
-Interactive polygon-based image annotation tool for MATLAB.
+**A MATLAB app for drawing polygon annotations on images.** Point, click, label — export masks and metadata for computer vision datasets.
 
 ## Features
 
